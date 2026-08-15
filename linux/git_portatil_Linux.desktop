@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Git Portátil
+Comment=Executa o Git portátil usando a chave SSH armazenada no pendrive
+Terminal=true
+Path=/tmp
+Exec=bash -c 'desktop="$1"; script="$(dirname "$desktop")/git_portatil_Linux.sh"; exec bash "$script"' _ %k
+Icon=utilities-terminal
+Categories=Development;
+StartupNotify=false
