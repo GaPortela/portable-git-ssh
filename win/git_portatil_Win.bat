@@ -20,7 +20,7 @@ if not exist "%CHAVE_PATH%" (
 )
 
 echo ==========================================
-echo     GIT PORTATIL: CLONE E CONFIG (WIN 11)
+echo     GIT PORTATIL: CLONE E CONFIG (WIN)
 echo ==========================================
 echo Pendrive:   %PENDRIVE_PATH%
 echo Identidade: %GIT_NAME% ^<%GIT_EMAIL%^>
@@ -41,8 +41,14 @@ goto MENU
 
 :CLONE
 call :CHECK_GIT
+if errorlevel 1 (
+    pause
+    goto MENU
+)
 
 echo.
+:READ_CLONE_URL
+set "url="
 set /p url="URL SSH (git@github.com:usuario/projeto.git): "
 
 if not defined url (
@@ -51,7 +57,49 @@ if not defined url (
     goto MENU
 )
 
-for %%F in ("%url:/=" "%") do set "FOLDER_NAME=%%~nF"
+set "SSH_URL_VALID="
+set "SSH_URL_REMAINDER=!url:~6!"
+set "SSH_URL_WITHOUT_SLASH=!SSH_URL_REMAINDER:/=!"
+if /I "!url:~0,6!"=="ssh://" if not "!SSH_URL_REMAINDER!"=="!SSH_URL_WITHOUT_SLASH!" if not "!url:~-1!"=="/" set "SSH_URL_VALID=1"
+
+set "URL_WITHOUT_SCHEME=!url:://=!"
+set "SSH_URL_AFTER_AT="
+for /f "tokens=1,* delims=@" %%A in ("!url!") do set "SSH_URL_AFTER_AT=%%B"
+set "SSH_AFTER_AT_WITHOUT_COLON=!SSH_URL_AFTER_AT::=!"
+if "!URL_WITHOUT_SCHEME!"=="!url!" if defined SSH_URL_AFTER_AT if not "!SSH_AFTER_AT_WITHOUT_COLON!"=="!SSH_URL_AFTER_AT!" if not "!url:~-1!"==":" set "SSH_URL_VALID=1"
+
+if not defined SSH_URL_VALID (
+    echo [ERRO] URL invalida. HTTP/HTTPS e outros formatos nao sao aceitos.
+    echo [INFO] Informe uma URL SSH, por exemplo:
+    echo        git@github.com:usuario/projeto.git
+    echo.
+    set "url="
+    goto READ_CLONE_URL
+)
+
+set "FOLDER_NAME="
+set "REPO_SOURCE=!url!"
+if "!REPO_SOURCE:~-1!"=="/" set "REPO_SOURCE=!REPO_SOURCE:~0,-1!"
+for %%F in ("!REPO_SOURCE:/=\!") do set "FOLDER_NAME=%%~nxF"
+if /I "!FOLDER_NAME:~-4!"==".git" set "FOLDER_NAME=!FOLDER_NAME:~0,-4!"
+
+if not defined FOLDER_NAME (
+    echo [ERRO] Nao foi possivel determinar o nome do repositorio pela URL.
+    pause
+    goto MENU
+)
+
+if "!FOLDER_NAME!"=="." (
+    echo [ERRO] Nome de repositorio invalido.
+    pause
+    goto MENU
+)
+
+if "!FOLDER_NAME!"==".." (
+    echo [ERRO] Nome de repositorio invalido.
+    pause
+    goto MENU
+)
 
 for /f "tokens=2,*" %%a in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders" /v Desktop') do (
     set "DESKTOP_PATH=%%b"
@@ -82,16 +130,37 @@ cd /d "!CLONE_PATH!" || (
 
 echo Clonando "!FOLDER_NAME!" em: !cd!
 
-git -c core.sshCommand="ssh -i '%CHAVE_PATH:\=/%' -o IdentitiesOnly=yes" clone "%url%"
+if exist "!FOLDER_NAME!" (
+    echo [ERRO] O destino ja existe: !CLONE_PATH!\!FOLDER_NAME!
+    pause
+    goto MENU
+)
+
+git -c core.sshCommand="ssh -i '%CHAVE_PATH:\=/%' -o IdentitiesOnly=yes" clone "!url!" "!FOLDER_NAME!"
+
+if errorlevel 1 (
+    echo [ERRO] Falha ao clonar o repositorio.
+    echo [INFO] Verifique a mensagem do Git exibida acima.
+    pause
+    goto MENU
+)
 
 if exist "!FOLDER_NAME!" (
     echo.
     echo [INFO] Pasta detectada. Aplicando configuracoes...
-    cd /d "!FOLDER_NAME!"
 
-    git config core.sshCommand "ssh -i '%CHAVE_PATH:\=/%' -o IdentitiesOnly=yes"
-    git config --local user.name "!GIT_NAME!"
-    git config --local user.email "!GIT_EMAIL!"
+    call :CONFIGURE_REPO "!CLONE_PATH!\!FOLDER_NAME!"
+    if errorlevel 1 (
+        echo [ERRO] O clone terminou, mas a configuracao local falhou.
+        pause
+        goto MENU
+    )
+
+    cd /d "!FOLDER_NAME!" || (
+        echo [ERRO] Nao foi possivel acessar o repositorio clonado.
+        pause
+        goto MENU
+    )
 
     echo [SUCESSO] Repositorio clonado e configurado!
     echo Local: !cd!
@@ -107,17 +176,27 @@ pause
 goto MENU
 
 :CONFIG
+call :CHECK_GIT
+if errorlevel 1 (
+    pause
+    goto MENU
+)
+
 set /p folder="Arraste a pasta do projeto para aqui e de Enter: "
 set "folder=!folder:"=!"
+
+call :CONFIGURE_REPO "!folder!"
+if errorlevel 1 (
+    echo [ERRO] Nao foi possivel configurar o diretorio informado.
+    pause
+    goto MENU
+)
+
 cd /d "!folder!" || (
     echo [ERRO] Nao foi possivel acessar o diretorio informado.
     pause
     goto MENU
 )
-
-git config core.sshCommand "ssh -i '%CHAVE_PATH:\=/%' -o IdentitiesOnly=yes"
-git config --local user.name "!GIT_NAME!"
-git config --local user.email "!GIT_EMAIL!"
 
 echo.
 echo [SUCESSO] Projeto configurado com sua identidade em: !cd!
@@ -159,33 +238,72 @@ if not defined GIT_EMAIL (
 
 exit /b 0
 
+:CONFIGURE_REPO
+set "REPO_PATH=%~1"
+
+if not exist "%REPO_PATH%\" (
+    echo [ERRO] Diretorio nao encontrado: %REPO_PATH%
+    exit /b 1
+)
+
+git -C "%REPO_PATH%" rev-parse --show-toplevel >nul 2>&1
+if errorlevel 1 (
+    echo [ERRO] O caminho informado nao e um repositorio Git valido:
+    echo        %REPO_PATH%
+    exit /b 1
+)
+
+git -C "%REPO_PATH%" config --local core.sshCommand "ssh -i '%CHAVE_PATH:\=/%' -o IdentitiesOnly=yes"
+if errorlevel 1 exit /b 1
+
+git -C "%REPO_PATH%" config --local user.name "!GIT_NAME!"
+if errorlevel 1 exit /b 1
+
+git -C "%REPO_PATH%" config --local user.email "!GIT_EMAIL!"
+if errorlevel 1 exit /b 1
+
+exit /b 0
+
 :CHECK_GIT
-echo [INFO] Verificando integridade do Git...
+echo [INFO] Verificando Git e OpenSSH...
 set "PATH=%PATH%;C:\Program Files\Git\cmd;C:\Program Files\Git\bin"
 
 git --version >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [OK] Git operacional.
-    goto :eof
+if not errorlevel 1 (
+    ssh -V >nul 2>&1
+    if not errorlevel 1 (
+        echo [OK] Git e OpenSSH operacionais.
+        exit /b 0
+    )
 )
 
-if exist "C:\Program Files\Git\cmd\git.exe" (
-    echo [!] Git encontrado no disco. Reiniciando terminal para atualizar caminhos...
-    timeout /t 2 >nul
-    start "" cmd /c "%~f0"
-    exit
+where winget >nul 2>&1
+if errorlevel 1 (
+    echo [ERRO] Git ou OpenSSH nao foi localizado e o winget nao esta disponivel.
+    echo [INFO] Instale o Git for Windows manualmente e execute novamente.
+    exit /b 1
 )
 
-echo [AVISO] Git nao localizado. Iniciando instalacao...
+echo [AVISO] Git ou OpenSSH nao localizado. Iniciando instalacao pelo winget...
 winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements
 
-if %errorlevel% equ 0 (
-    echo [SUCESSO] Instalacao concluida. Reiniciando script...
-    timeout /t 3 >nul
-    start "" cmd /c "%~f0"
-    exit
-) else (
+if errorlevel 1 (
     echo [ERRO] Falha na instalacao automatica.
-    pause
-    goto MENU
+    exit /b 1
 )
+
+set "PATH=%PATH%;C:\Program Files\Git\cmd;C:\Program Files\Git\bin"
+git --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERRO] A instalacao terminou, mas o Git ainda nao foi localizado.
+    exit /b 1
+)
+
+ssh -V >nul 2>&1
+if errorlevel 1 (
+    echo [ERRO] A instalacao terminou, mas o OpenSSH ainda nao foi localizado.
+    exit /b 1
+)
+
+echo [SUCESSO] Git e OpenSSH instalados e operacionais.
+exit /b 0
