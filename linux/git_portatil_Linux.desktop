@@ -4,7 +4,7 @@ Name=Git Portátil
 Comment=Executa o Git portátil usando a chave SSH armazenada no pendrive
 Terminal=true
 Path=/tmp
-Exec=bash -c 'desktop="$1"; script="$(dirname "$desktop")/git_portatil_Linux.sh"; exec bash "$script"' _ %k
+Exec=bash -c "desktop=\"\$1\"; temp=\"\"; status=1; cleanup() { [ -z \"\$temp\" ] || rm -f -- \"\$temp\"; }; trap cleanup EXIT; original=\"\$(dirname \"\$desktop\")/git_portatil_Linux.sh\"; temp=\"\$(mktemp /tmp/git-portatil-launch.XXXXXX.sh)\"; if [ -n \"\$temp\" ]; then cp -- \"\$original\" \"\$temp\" && chmod 700 \"\$temp\" && bash \"\$temp\" --original-script \"\$original\"; status=\$?; fi; if [ \"\$status\" -ne 0 ]; then echo; echo \"[ERRO] O script terminou com codigo \$status.\"; fi; echo; read -r -p \"Pressione Enter para fechar...\"; exit \"\$status\"" _ %k
 Icon=utilities-terminal
 Categories=Development;
 StartupNotify=false
