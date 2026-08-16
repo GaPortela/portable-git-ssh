@@ -74,13 +74,15 @@ O módulo verifica Git e OpenSSH. Quando necessário, tenta instalar o Git for W
 
 O OpenSSH rejeita uma chave privada quando grupo ou outros usuários possuem acesso ao arquivo.
 
-Inicie o projeto por:
+Abra um terminal fora do pendrive e execute:
 
-```text
-linux/git_portatil_Linux.desktop
+```bash
+bash "/caminho/do/pendrive/linux/git_portatil_Linux.sh"
 ```
 
-O launcher permite que o módulo ajuste a montagem VFAT ou exFAT e valide novamente a chave.
+O script se relança a partir de `/tmp`, ajusta a montagem VFAT ou exFAT e valida novamente a chave sem copiar a credencial.
+
+Se `git_portatil_Linux.desktop` apresentar uma mensagem de arquivo não autorizado, a montagem pode estar usando `showexec`. Essa opção impede que arquivos `.desktop` e `.sh` apareçam como executáveis em VFAT. Utilize o comando com `bash`; o `.desktop` é apenas um atalho opcional.
 
 ### O dispositivo está ocupado no Linux
 
@@ -147,7 +149,11 @@ As providências mais comuns são:
 > [!WARNING]
 > Não use `fuser -km` no mountpoint. A opção `-k` encerra processos e pode atingir mais programas do que o esperado. Os scripts deste projeto utilizam `fuser` somente para diagnóstico e nunca encerram processos automaticamente.
 
-Depois de liberar o dispositivo, execute novamente `git_portatil_Linux.desktop`.
+Depois de liberar o dispositivo, abra um terminal fora do pendrive e execute novamente:
+
+```bash
+bash "/caminho/do/pendrive/linux/git_portatil_Linux.sh"
+```
 
 ### Git ou OpenSSH não está disponível no Linux
 

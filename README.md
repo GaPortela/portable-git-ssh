@@ -319,16 +319,18 @@ O menu apresenta:
 > [!WARNING]
 > Distribuições Arch Linux e derivadas que utilizam `pacman` ainda não são consideradas compatíveis com este projeto. Existe uma tentativa de instalação no código, mas esse fluxo não foi testado nem homologado e será tratado como suporte futuro.
 
-O ponto de entrada recomendado é:
+Abra um terminal cujo diretório atual esteja fora do pendrive e execute:
 
-```text
-linux/git_portatil_Linux.desktop
+```bash
+bash "/caminho/do/pendrive/linux/git_portatil_Linux.sh"
 ```
 
-Abra o `.desktop` pelo gerenciador de arquivos e escolha a opção para executá-lo. Na primeira execução, o ambiente gráfico pode solicitar que o arquivo seja marcado como confiável.
+Como alternativa prática, digite `bash `, arraste `git_portatil_Linux.sh` para o terminal e pressione Enter. Na maioria dos ambientes gráficos, isso preenche automaticamente o caminho completo do arquivo.
 
 > [!IMPORTANT]
-> Prefira o `.desktop` em vez de iniciar o `.sh` dentro do pendrive. O launcher abre o terminal com o diretório de trabalho em `/tmp`, evitando que o próprio terminal impeça a desmontagem necessária em VFAT ou exFAT.
+> Abra o terminal fora do pendrive. O script se relança por uma cópia temporária em `/tmp` antes da desmontagem necessária em VFAT ou exFAT; a chave privada não é copiada.
+
+O arquivo `linux/git_portatil_Linux.desktop` permanece disponível como atalho opcional. Algumas montagens VFAT utilizam `showexec`, que impede o ambiente gráfico de autorizar arquivos `.desktop`. Se isso acontecer, utilize o comando com `bash`, que não depende do bit de execução nem das políticas do KDE, GNOME ou XFCE.
 
 ### Permissões em VFAT e exFAT
 
@@ -337,7 +339,7 @@ VFAT e exFAT não armazenam permissões Unix individuais como ext4. Quando a cha
 1. detecta dinamicamente dispositivo, filesystem e mountpoint;
 2. executa uma cópia temporária do script fora do pendrive;
 3. desmonta o dispositivo;
-4. monta novamente com o usuário atual e máscaras restritivas;
+4. monta novamente com o usuário atual e máscaras restritivas, sem preservar `showexec`;
 5. valida origem, proprietário e permissões da chave;
 6. restaura a montagem original automaticamente se a operação falhar.
 
