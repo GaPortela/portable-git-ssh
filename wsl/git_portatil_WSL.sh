@@ -20,6 +20,14 @@ ENV_PATH="${PENDRIVE_ROOT}/.env"
 GIT_NAME=""
 GIT_EMAIL=""
 
+validate_ubuntu() {
+    if [ "${WSL_DISTRO_NAME:-}" != "Ubuntu" ]; then
+        echo "[ERRO] Este script deve ser executado exclusivamente na distribuicao WSL Ubuntu."
+        echo "       Distribuicao atual: ${WSL_DISTRO_NAME:-nao identificada}"
+        return 1
+    fi
+}
+
 pause_menu() {
     echo
     read -r -p "Pressione Enter para continuar..." _
@@ -110,6 +118,8 @@ check_pendrive_mount() {
 }
 
 prepare_key() {
+    local key_mode key_owner
+
     check_pendrive_mount || return 1
 
     if [ ! -f "$CHAVE_PATH" ]; then
@@ -123,6 +133,25 @@ prepare_key() {
         return 1
     fi
 
+    key_mode="$(stat -c '%a' "$CHAVE_PATH" 2>/dev/null || true)"
+    key_owner="$(stat -c '%u' "$CHAVE_PATH" 2>/dev/null || true)"
+
+    if ! [[ "$key_mode" =~ ^[0-7]{3,4}$ ]] ||
+       (( (8#$key_mode & 077) != 0 )) ||
+       (( (8#$key_mode & 0400) == 0 )); then
+        echo "[ERRO] A chave continua com permissoes incompativeis com o OpenSSH."
+        echo "[INFO] Modo detectado: ${key_mode:-desconhecido}"
+        return 1
+    fi
+
+    if [ "$key_owner" != "$(id -u)" ] || [ ! -r "$CHAVE_PATH" ]; then
+        echo "[ERRO] A chave nao pertence ao usuario atual ou nao pode ser lida."
+        echo "[INFO] Dono detectado: ${key_owner:-desconhecido}; esperado: $(id -u)"
+        return 1
+    fi
+
+    echo "[OK] Chave protegida: dono=$key_owner, modo=$key_mode."
+
     export GIT_SSH_COMMAND="ssh -i '$CHAVE_PATH' -o IdentitiesOnly=yes -o IdentityAgent=none"
 }
 
@@ -135,7 +164,12 @@ check_git() {
     fi
 
     echo "[AVISO] Git/OpenSSH nao encontrado. Instalando..."
-    sudo apt update && sudo apt install -y git openssh-client
+    sudo apt update && sudo apt install -y git openssh-client || return 1
+
+    if ! command -v git >/dev/null 2>&1 || ! command -v ssh >/dev/null 2>&1; then
+        echo "[ERRO] Git ou OpenSSH continua indisponivel apos a instalacao."
+        return 1
+    fi
 }
 
 normalize_path() {
@@ -153,11 +187,24 @@ normalize_path() {
     fi
 }
 
+is_ssh_url() {
+    local url="$1"
+    local normalized_url="${url,,}"
+
+    case "$normalized_url" in
+        *[[:space:]]*) return 1 ;;
+        ssh://?*/?*) return 0 ;;
+        *://*) return 1 ;;
+        ?*@?*:?*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 configure_repo() {
     local repo="$1"
 
-    if [ ! -d "$repo/.git" ]; then
-        echo "[ERRO] O caminho informado nao contem um repositorio Git:"
+    if ! git -C "$repo" rev-parse --show-toplevel >/dev/null 2>&1; then
+        echo "[ERRO] O caminho informado nao e um repositorio Git valido:"
         echo "       $repo"
         return 1
     fi
@@ -174,7 +221,7 @@ configure_repo() {
 open_terminal() {
     local dir="$1"
     local proj_name="$2"
-    local distro="${WSL_DISTRO_NAME:-Ubuntu}"
+    local distro="Ubuntu"
     local windows_dir
 
     if command -v wt.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1; then
@@ -236,19 +283,30 @@ prepare_clone_destination() {
 }
 
 clone_repo() {
+    local url folder_name clone_path repo_path clone_input
+
     check_git || { pause_menu; return; }
     prepare_key || { pause_menu; return; }
 
-    echo
-    read -r -p "URL SSH (git@github.com:usuario/projeto.git): " url
+    while true; do
+        echo
+        read -r -p "URL SSH (git@github.com:usuario/projeto.git): " url
 
-    if [ -z "$url" ]; then
-        echo "[ERRO] URL vazia."
-        pause_menu
-        return
-    fi
+        if [ -z "$url" ]; then
+            echo "[ERRO] URL vazia."
+            pause_menu
+            return
+        fi
 
-    local folder_name clone_path repo_path clone_input
+        if is_ssh_url "$url"; then
+            break
+        fi
+
+        echo "[ERRO] URL invalida. HTTP/HTTPS e outros formatos nao sao aceitos."
+        echo "[INFO] Informe uma URL SSH, por exemplo:"
+        echo "       git@github.com:usuario/projeto.git"
+    done
+
     folder_name="$(basename -s .git "$url")"
 
     echo
@@ -281,13 +339,7 @@ clone_repo() {
 
     echo "Clonando \"$folder_name\" em: $(pwd)"
 
-    if [ -d "$folder_name" ]; then
-        if ! git clone "$url" "$folder_name"; then
-            echo "[ERRO] Falha ao clonar o repositorio."
-            pause_menu
-            return
-        fi
-    elif ! git clone "$url"; then
+    if ! git clone "$url" "$folder_name"; then
         echo "[ERRO] Falha ao clonar o repositorio."
         pause_menu
         return
@@ -400,6 +452,7 @@ menu() {
     done
 }
 
+validate_ubuntu || exit 1
 load_config || exit 1
 prepare_key || exit 1
 menu
