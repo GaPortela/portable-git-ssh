@@ -5,8 +5,9 @@
 #
 # Arquitetura:
 #   - Este script NAO depende de Konsole, GNOME Terminal etc.
-#   - O launcher .desktop inicia o terminal com cwd em /tmp,
-#     evitando que o proprio terminal prenda o pendrive.
+#   - A entrada universal e feita com: bash git_portatil_Linux.sh
+#   - O script se relanca por uma copia em /tmp antes de desmontar
+#     o pendrive, sem copiar a chave privada.
 #
 # Estrutura relativa esperada:
 #   DIRETORIO_PAI/.env
@@ -19,10 +20,10 @@
 # pai da pasta linux. .env.example, id_ed25519.pub e README-Linux.md
 # podem acompanhar essa estrutura, mas nao sao necessarios para executar.
 #
-# O arquivo .desktop e o ponto de entrada recomendado. Ele inicia o
-# terminal com o diretorio de trabalho em /tmp; antes de desmontar o
-# pendrive, este script se relanca por uma copia temporaria e preserva
-# o caminho original via --original-script.
+# O arquivo .desktop e apenas um atalho opcional. Em VFAT, opcoes como
+# showexec podem impedir que ambientes graficos autorizem sua execucao.
+# Antes de desmontar o pendrive, este script se relanca por uma copia
+# temporaria e preserva o caminho original via --original-script.
 
 # Permite executar inclusive como:
 #   sh git_portatil_Linux.sh
@@ -193,6 +194,14 @@ build_mount_options() {
                     preserved_options+=("$option")
                 fi
                 ;;
+            showexec)
+                # Em VFAT, showexec retira o bit de execucao de .sh e
+                # .desktop. Preserve apenas ao reconstruir a montagem
+                # original; a montagem segura deve permitir esses arquivos.
+                if [ "$secure_permissions" != "yes" ]; then
+                    preserved_options+=("$option")
+                fi
+                ;;
             *)
                 preserved_options+=("$option")
                 ;;
@@ -312,7 +321,8 @@ ensure_execution_outside_mount() {
         echo "[ERRO] O processo que iniciou este script esta dentro do pendrive:"
         echo "       $parent_cwd"
         echo
-        echo "[INFO] Feche esse terminal/processo e use git_portatil_Linux.desktop."
+        echo "[INFO] Feche este terminal e abra outro fora do pendrive."
+        echo "[INFO] Depois execute: bash \"$SCRIPT_PATH\""
         return 1
     fi
 
